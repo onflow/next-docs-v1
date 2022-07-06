@@ -71,6 +71,9 @@ export const loader: LoaderFunction = async ({
   const firstRoute = params.repo
   const { secondRoute, path } = deconstructPath(firstRoute, params["*"])
 
+  const isRawMDXFileRequest = path.toLowerCase().endsWith(".mdx")
+  const isRawMarkdownFileRequest = path.toLowerCase().endsWith(".md")
+
   invariant(firstRoute, `expected repo param`)
 
   const contentSpec = getContentSpec(firstRoute, secondRoute)
@@ -79,9 +82,7 @@ export const loader: LoaderFunction = async ({
   }
 
   const isDocument =
-    !path.includes(".") ||
-    path.toLowerCase().endsWith(".md") ||
-    path.toLowerCase().endsWith(".mdx")
+    !path.includes(".") || isRawMDXFileRequest || isRawMarkdownFileRequest
 
   if (!isDocument) {
     throw redirect(`/${params.repo}/_raw/${path}`)

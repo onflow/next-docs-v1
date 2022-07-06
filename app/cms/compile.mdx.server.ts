@@ -13,6 +13,13 @@ import { HIGHLIGHT_LANGUAGES } from "./utils/constants"
 import formatLinks from "./utils/format-links"
 import { markdownToToc } from "./utils/generate-toc"
 
+function bundleMarkdown({ source, files }: { [key: string]: any }) {
+  return {
+    code: "",
+    frontmatter: {},
+  }
+}
+
 if (process.platform === "win32") {
   process.env.ESBUILD_BINARY_PATH = path.resolve(
     process.cwd(),
@@ -84,12 +91,15 @@ async function compileMdx<FrontmatterType extends Record<string, unknown>>(
 ) {
   const { default: remarkSlug } = await import("remark-slug")
   const { default: gfm } = await import("remark-gfm")
+  const { removeComments } = await import("./markdown.server")
+
   const indexRegex = new RegExp(`${slug}\\/index.mdx?$`)
   const indexFile = githubFiles.find(({ path }) => indexRegex.test(path))
 
   if (!indexFile) return null
 
   const rootDir = indexFile.path.replace(/index.mdx?$/, "")
+
   const relativeFiles: Array<GitHubFile> = githubFiles.map(
     ({ path, content }) => ({
       path: path.replace(rootDir, "./"),
@@ -101,9 +111,14 @@ async function compileMdx<FrontmatterType extends Record<string, unknown>>(
     valueName: "content",
   })
 
+  const readTime = calculateReadingTime(indexFile.content)
+  const toc = markdownToToc(indexFile.content)
+
+  const clean = await removeComments(indexFile.content)
+
   try {
     const { frontmatter, code } = await bundleMDX({
-      source: indexFile.content,
+      source: String(clean),
       files,
       mdxOptions(options) {
         options.remarkPlugins = [
@@ -120,9 +135,6 @@ async function compileMdx<FrontmatterType extends Record<string, unknown>>(
         return options
       },
     })
-    const readTime = calculateReadingTime(indexFile.content)
-    const toc = markdownToToc(indexFile.content)
-
     return {
       code,
       readTime,
@@ -130,7 +142,6 @@ async function compileMdx<FrontmatterType extends Record<string, unknown>>(
       toc,
     }
   } catch (error: unknown) {
-    console.error(`Compilation error for slug: `, slug)
     throw error
   }
 }

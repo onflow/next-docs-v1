@@ -65,6 +65,7 @@ async function getMdxPage(
   options: CachifiedOptions
 ): Promise<MdxPage | null> {
   const key = getCompiledKey(owner, repo, branch, fileOrDirPath)
+
   const page = await cachified({
     cache: redisCache,
     maxAge: defaultMaxAge,
@@ -344,6 +345,9 @@ const isLinkExternal = (href?: string) => !!href?.match(/^(www|http)/i)
 
 function GetMdxComponents(theme: Theme) {
   return {
+    TrackingLink: ({ children }: any) => {
+      return <div>{children}</div>
+    },
     a: (props: LinkProps & { href: string }) => {
       if (isLinkExternal(props.href)) {
         return (
@@ -416,8 +420,8 @@ function GetMdxComponents(theme: Theme) {
  */
 function getMdxComponent(page: MdxPage, theme: Theme | null) {
   const { code, frontmatter } = page
-  const Component = getMDXComponent(code, frontmatter)
 
+  const Component = getMDXComponent(code, frontmatter)
   // const headings = getHeadingsFromMdxComponent(Component);
   function MdxComponent({
     components,
