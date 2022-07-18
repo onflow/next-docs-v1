@@ -55,6 +55,7 @@ export const FIRST_ROUTES = [
   "tools",
   "cadence",
   "nodes",
+  "mock-developer-doc",
   "fcl-js",
 ] as const
 export const SECOND_ROUTES = [

@@ -1,30 +1,33 @@
 import { json, LoaderFunction, MetaFunction, redirect } from "@remix-run/node"
-import { useCatch, useLoaderData, useLocation } from "@remix-run/react"
+import { Form, useCatch, useLoaderData, useLocation } from "@remix-run/react"
 import { Params } from "react-router"
 import invariant from "tiny-invariant"
-import { getMdxPage, useMdxComponent } from "~/cms/utils/mdx"
-import { ContentSpec, getContentSpec } from "~/constants/repos"
+import {
+  internalPageLoader,
+  InternalPageLoaderData,
+  isPathDocument,
+} from "~/cms/internal-page"
+import { useMdxComponent } from "~/cms/utils/mdx"
+import { getContentSpec } from "~/constants/repos"
 import {
   FirstRoute,
   isFirstRoute,
   isSecondRoute,
   SecondRoute,
 } from "~/constants/repos/contents-structure"
-import { ErrorPage } from "~/ui/design-system/src/lib/Components/ErrorPage"
-import { getSocialMetas } from "~/utils/seo"
-import { MdxPage } from "../../cms"
-import { InternalPage } from "../../ui/design-system/src/lib/Pages/InternalPage"
 import AppLink from "~/ui/design-system/src/lib/Components/AppLink"
+import { ErrorPage } from "~/ui/design-system/src/lib/Components/ErrorPage"
 import {
   SwitchContentName,
   switchContents,
 } from "~/ui/design-system/src/lib/Components/Internal/switchContent"
+import { getSocialMetas } from "~/utils/seo"
+import { InternalPage } from "../../ui/design-system/src/lib/Pages/InternalPage"
 
 export { InternalErrorBoundary as ErrorBoundary } from "~/errors/error-boundaries"
 
-// @ts-ignore
 export const meta: MetaFunction = ({ data, location }) => {
-  const typedData = data as LoaderData
+  const typedData = data as InternalPageLoaderData
   if (typedData && typedData.page) {
     return getSocialMetas({
       title: typedData.page.frontmatter?.title,
@@ -34,12 +37,6 @@ export const meta: MetaFunction = ({ data, location }) => {
   }
 
   return {}
-}
-
-type LoaderData = {
-  content: ContentSpec
-  path: string
-  page: MdxPage
 }
 
 type NestedRoute = {
@@ -103,10 +100,11 @@ export const deconstructPath = (params: Params<string>): NestedRoute => {
 export const loader: LoaderFunction = async ({
   params,
   request,
-}): Promise<LoaderData> => {
+}): Promise<InternalPageLoaderData> => {
   if (params["*"]?.endsWith("index") && request.url.endsWith("/index")) {
     throw redirect(request.url.replace(/\/index$/, "/"))
   }
+
   const { firstRoute, secondRoute, path }: NestedRoute = deconstructPath(params)
   const contentSpec = getContentSpec(firstRoute, secondRoute)
 
@@ -114,41 +112,23 @@ export const loader: LoaderFunction = async ({
     throw json({ status: "noRepo" }, { status: 404 })
   }
 
-  const isDocument =
-    !path.includes(".") ||
-    path.toLowerCase().endsWith(".md") ||
-    path.toLowerCase().endsWith(".mdx")
-
-  if (!isDocument) {
+  if (!isPathDocument(path)) {
     throw redirect(`/raw/${params.repo}/${params["*"]}`)
   }
 
-  let page: MdxPage | null
+  const fullPath = [contentSpec.basePath, path].join("/")
 
-  try {
-    page = await getMdxPage(
-      {
-        owner: contentSpec.owner,
-        repo: contentSpec.repoName,
-        branch: contentSpec.branch,
-        fileOrDirPath: [contentSpec.basePath, path].join("/"),
-        isTrusted: contentSpec.isTrusted,
-      },
-      { request, forceFresh: process.env.FORCE_REFRESH === "true" }
-    )
-  } catch (e) {
-    throw json({ status: "mdxError", error: e }, { status: 500 })
-  }
-
-  if (!page) {
-    throw json({ status: "noPage" }, { status: 404 })
-  }
-
-  return { content: contentSpec, path, page }
+  return internalPageLoader({
+    fullPath,
+    shortPath: path,
+    contentSpec,
+    request,
+  })
 }
 
 export default function RepoDocument() {
-  const { content, path, page } = useLoaderData<LoaderData>()
+  const { content, path, page, ...data } =
+    useLoaderData<InternalPageLoaderData>()
   const MDXContent = useMdxComponent(page)
 
   // Tools live at top-level URLs like /fcl-js so they will never be nested
@@ -161,24 +141,46 @@ export default function RepoDocument() {
   )
 
   return (
-    <InternalPage
-      activePath={path}
-      contentDisplayName={content.displayName}
-      contentPath={content.contentName}
-      header={path === "index" ? content.landingHeader : undefined}
-      sidebarConfig={content.schema?.sidebar}
-      internalSidebarMenu={
-        isSwitchContent
-          ? {
-              selected: content.contentName as SwitchContentName,
-            }
-          : undefined
-      }
-      githubUrl={page.editLink}
-      toc={page.toc}
-    >
-      <MDXContent />
-    </InternalPage>
+    <>
+      {data.versions ? (
+        <Form method="post" action={`/${content.repoName}?index`}>
+          <div className="flex">
+            <select
+              defaultValue={data.selectedVersion}
+              name="version"
+              className="bg-black"
+            >
+              {data.versions.map((version) => (
+                <option key={version} value={version}>
+                  {version}
+                </option>
+              ))}
+            </select>
+            <button type="submit" className="border border-gray-500 px-3">
+              Go
+            </button>
+          </div>
+        </Form>
+      ) : null}
+      <InternalPage
+        activePath={path}
+        contentDisplayName={content.displayName}
+        contentPath={content.contentName}
+        header={path === "index" ? content.landingHeader : undefined}
+        sidebarConfig={content.schema?.sidebar}
+        internalSidebarMenu={
+          isSwitchContent
+            ? {
+                selected: content.contentName as SwitchContentName,
+              }
+            : undefined
+        }
+        githubUrl={page.editLink}
+        toc={page.toc}
+      >
+        <MDXContent />
+      </InternalPage>
+    </>
   )
 }
 

@@ -1,7 +1,7 @@
 function getEnv() {
   return {
     NODE_ENV: process.env.NODE_ENV,
-    SENTRY_DSN: process.env.SENTRY_DSN,
+    SENTRY_DSN: process.env.SENTRY_DSN || null,
     SENTRY_ENV: process.env.SENTRY_ENV,
     BOT_GITHUB_TOKEN: process.env.BOT_GITHUB_TOKEN,
     BOT_DISCORD_TOKEN: process.env.BOT_DISCORD_TOKEN,
